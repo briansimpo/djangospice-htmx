@@ -41,5 +41,5 @@ class HeaderRenderer:
         if not response.has_htmx:
             return
 
-        for name, value in response._htmx_headers.to_dict().items():
+        for name, value in response._htmx.to_dict().items():
             http_response.headers[name] = value
