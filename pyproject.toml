@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling>=1.24.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "djangospice-htmx"
+version = "0.1.0"
+description = "Reactive server-rendered interfaces for Django, powered by HTMX."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+
+authors = [
+    { name = "Brian Simpokolwe", email = "briansimpokolwe@gmail.com" }
+]
+
+keywords = [
+    "django",
+    "djangospice_htmx",
+    "htmx",
+]
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Framework :: Django",
+    "Framework :: Django :: 5",
+    "Framework :: Django :: 6",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Education",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+
+
+dependencies = [
+    "django>=5.0",
+    "djangospice-framework"
+]
+
+
+[project.urls]
+Homepage = "https://github.com/briansimpo/djangospice-htmx"
+Documentation = "https://github.com/briansimpo/djangospice-htmx#readme"
+Source = "https://github.com/briansimpo/djangospice-htmx"
+Issues = "https://github.com/briansimpo/djangospice-htmx/issues"
+
+# --- Hatch Build Configuration ---
+[tool.hatch.build.targets.wheel]
+packages = ["src/djangospice_htmx"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src" = ""
