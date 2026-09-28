@@ -8,7 +8,7 @@ from django.urls import reverse
 from .fragments import HTMLFragment, HTMLFragments
 from .document import Document
 from .headers import HTMXHeaders
-from .oob import HTMXOOB, OOBList
+from .oob import OOBList
 
 
 @dataclass(slots=True, kw_only=True)
