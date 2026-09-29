@@ -166,7 +166,7 @@ class Response:
         self._htmx.refresh = enabled
         return self
 
-    def trigger(self, event: Any, detail: Any = None, **values: Any) -> Self:
+    def event(self, event: Any, detail: Any = None, **values: Any) -> Self:
         detail = values if values else detail
         self._htmx.trigger(event, detail)
         return self
