@@ -38,8 +38,8 @@ classifiers = [
 
 
 dependencies = [
-    "django>=5.0",
-    "djangospice-framework"
+    "django>=6.0",
+    "djangospice-framework>=0.3"
 ]
 
 

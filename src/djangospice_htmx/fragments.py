@@ -10,7 +10,6 @@ from django.utils.safestring import SafeString, mark_safe
 from .component import HTMLComponent
 
 
-@dataclass(slots=True)
 @dataclass(slots=True, kw_only=True)
 class HTMLFragment(HTMLComponent):
     template_name: str | None = None
