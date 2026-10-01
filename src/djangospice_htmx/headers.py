@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar, Self
 
 from djangospice_framework.core.serializable import Serializable
-from djangospice_framework.core.payload import Payload
 
 from .events import Event
 from .location import HTMXLocation
@@ -53,7 +52,7 @@ class HTMXHeaders(Serializable):
     # ------------------------------------------------------------------
     # Extra Headers
     # ------------------------------------------------------------------
-    headers: Payload = field(default_factory=Payload)
+    headers: dict[str, Any] = field(default_factory=dict)
 
     # ------------------------------------------------------------------
     # Mapping

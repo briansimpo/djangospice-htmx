@@ -16,7 +16,7 @@ class Event(Payload):
     >>> events.event("refreshTable")
     """
 
-    def add(self, name: str, payload: dict[str, Any] | Payload | None = None) -> Self:
+    def add(self, name: str, payload: dict[str, Any] | None = None) -> Self:
         """
         Add or replace an event.
 
@@ -27,9 +27,7 @@ class Event(Payload):
         Returns:
             Self instance for chaining.
         """
-        self[name] = (
-            payload if isinstance(payload, Payload) else Payload(payload or {})
-        )
+        self[name] = payload
         return self
 
     def merge(self, other: Event) -> Self:

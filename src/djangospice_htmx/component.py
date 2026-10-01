@@ -1,34 +1,69 @@
-import hashlib
-from dataclasses import dataclass, field
-from typing import Any
-from urllib.parse import urlencode
+from __future__ import annotations
 
+import hashlib
+
+from dataclasses import dataclass, field
+from typing import Any, ClassVar
+from urllib.parse import urlencode
+from html import escape
+
+from django.db.models import Model
 from django.http import HttpRequest
 from django.template.loader import render_to_string
-from django.utils.safestring import mark_safe
-from django.core.exceptions import ImproperlyConfigured
-from django.db.models import Model
+from django.utils.safestring import SafeString, mark_safe
 
 from djangospice_framework.core.serializable import Serializable
-from djangospice_framework.core.payload import Payload
 
-from .attributes import HTMXAttributes
+from .attributes import HTMLAttributeRenderer, HTMXAttributes
 
 
 @dataclass
 class HTMLComponent(Serializable):
     """
-    Shared UI logic for deterministic ID generation, safe state hashing, 
-    and unified rendering pipelines.
+    Base class for server-rendered HTML components.
+
+    A component can render in one of two ways:
+
+    1. Template-based rendering::
+
+        class UserCard(HTMLComponent):
+            template_name = "components/user_card.html"
+
+            def get_context(self):
+                context = super().get_context()
+                context["user"] = self.user
+                return context
+
+    2. Direct-content rendering::
+
+        class Divider(HTMLComponent):
+
+            def get_content(self):
+                return "<hr>"
+
+    ``template_name`` is therefore optional. A component only needs to
+    provide either a template or direct content.
     """
-    
-    template_name: str | None = None
-    context: Payload = field(default_factory=Payload)
-    attrs: Payload = field(default_factory=Payload)
-    htmx: HTMXAttributes = field(default_factory=HTMXAttributes)
+
+    # ------------------------------------------------------------------
+    # Presentation Configuration
+    # ------------------------------------------------------------------
+
+    template_name: ClassVar[str | None] = None
+
+    context: dict[str, Any] = field(default_factory=dict)
+
+    # Standard HTML attributes.
+    attrs: dict[str, Any] = field(default_factory=dict)
+
+    # HTMX attributes.
+    htmx: HTMXAttributes = field(
+        default_factory=HTMXAttributes
+    )
+
     css_class: str = ""
-    
-    # State tracking moved to base for universal ID/Cache generation
+
+    # Runtime/state parameters used for deterministic identity.
     kwargs: dict[str, Any] = field(default_factory=dict)
 
     # ------------------------------------------------------------------
@@ -36,114 +71,267 @@ class HTMLComponent(Serializable):
     # ------------------------------------------------------------------
 
     def _serialize_for_hash(self, value: Any) -> str:
-        """Safely stringifies values to guarantee deterministic hashes."""
+        """
+        Safely serialize a value for deterministic state hashing.
+        """
         if isinstance(value, Model):
             return f"{value.__class__.__name__}:{value.pk}"
-        if isinstance(value, (int, float, str, bool, type(None))):
+
+        if isinstance(
+            value,
+            (int, float, str, bool, type(None)),
+        ):
             return str(value)
+
         if isinstance(value, (list, tuple)):
-            return f"[{','.join(self._serialize_for_hash(i) for i in value)}]"
+            return (
+                "["
+                + ",".join(
+                    self._serialize_for_hash(item)
+                    for item in value
+                )
+                + "]"
+            )
+
         return value.__class__.__name__
 
-    def _generate_state_hash(self, exclude_keys: set[str] | None = None) -> str:
-        """DRY helper for hashing component state."""
+    def _generate_state_hash(
+        self,
+        exclude_keys: set[str] | None = None,
+    ) -> str:
+        """
+        Generate a deterministic hash from component state.
+        """
         exclude = exclude_keys or {"id"}
+
         state_pairs = sorted(
-            (k, self._serialize_for_hash(v))
-            for k, v in self.kwargs.items()
-            if k not in exclude
+            (
+                key,
+                self._serialize_for_hash(value),
+            )
+            for key, value in self.kwargs.items()
+            if key not in exclude
         )
+
         state = urlencode(state_pairs)
-        return hashlib.sha1(state.encode()).hexdigest()[:8] if state else ""
+
+        if not state:
+            return ""
+
+        return hashlib.sha1(
+            state.encode()
+        ).hexdigest()[:8]
 
     @property
     def id(self) -> str:
-        """Generates a deterministic, static ID based on the component's state."""
-        if explicit_id := self.kwargs.get("id"):
+        """
+        Return a deterministic HTML ID based on component state.
+
+        An explicit ``id`` passed through ``kwargs`` always takes
+        precedence.
+        """
+        explicit_id = self.kwargs.get("id")
+
+        if explicit_id:
             return str(explicit_id)
 
-        name = getattr(self, "name", self.__class__.__name__.lower())
-        safe_name = name.replace("_", "-")
+        name = getattr(
+            self,
+            "name",
+            self.__class__.__name__.lower(),
+        )
+
+        safe_name = str(name).replace("_", "-")
         digest = self._generate_state_hash()
-        
-        return f"{safe_name}-{digest}" if digest else safe_name
+
+        return (
+            f"{safe_name}-{digest}"
+            if digest
+            else safe_name
+        )
 
     # ------------------------------------------------------------------
-    # HTML & Rendering Pipeline
+    # HTML Attributes
     # ------------------------------------------------------------------
 
     @property
     def html_attributes(self) -> dict[str, Any]:
         """
-        Combined HTML + HTMX attributes.
+        Return the complete attribute mapping for the component.
 
-        Subclasses may extend this through get_extra_attributes().
+        This method composes standard HTML attributes, subclass-provided
+        attributes, and HTMX attributes. It does not render HTML.
         """
+        attributes = dict(self.attrs)
 
-        combined = dict(self.attrs)
-
-        combined.update(
+        attributes.update(
             self.get_extra_attributes()
         )
 
         if self.id:
-            combined["id"] = self.id
+            attributes["id"] = self.id
 
         if self.css_class:
-            combined["class"] = self.css_class
+            attributes["class"] = self.css_class
 
-        combined.update(
+        attributes.update(
             self.htmx.to_dict()
         )
 
-        return combined
+        return attributes
 
-
+    @property
+    def rendered_attributes(self) -> SafeString:
+        """
+        Return the component's attributes rendered as safe HTML.
+        """
+        return mark_safe(
+            HTMLAttributeRenderer.render(
+                self.html_attributes
+            )
+        )
+ 
     def get_extra_attributes(self) -> dict[str, Any]:
         """
-        Hook for components that need to contribute
-        additional HTML attributes.
+        Hook for subclasses to provide additional HTML attributes.
         """
         return {}
 
-    def get_template(self) -> str:
-        if not self.template_name:
-            raise ImproperlyConfigured(f"{self.__class__.__name__} must define a template.")
+    # ------------------------------------------------------------------
+    # Template & Context
+    # ------------------------------------------------------------------
+
+    def get_template(self) -> str | None:
+        """
+        Return the component template.
+
+        ``None`` means the component is intended to render direct
+        content instead of a template.
+        """
         return self.template_name
 
     def get_context(self) -> dict[str, Any]:
-        """Build the base template context."""
-        ctx = Payload(self.context)
-        ctx["attrs"] = self.html_attributes
-        ctx.update(self.kwargs)
-        return ctx
-    
-    def get_assets(self) -> dict[str, list[str]]:
         """
-        Override this to return required assets.
-        Example: return {"js": ["js/chart.js"], "css": ["css/chart.css"]}
+        Build the base template context.
+
+        ``attrs`` contains the rendered HTML attribute string rather
+        than the raw attribute dictionary.
         """
-        return {"js": [], "css": []}
-    
-    def get_content(self) -> dict[str, Any] | str | None:
+        context = dict(self.context)
+
+        context["html_attrs"] = self.rendered_attributes
+
+        context.update(self.kwargs)
+
+        return context
+
+    # ------------------------------------------------------------------
+    # Content
+    # ------------------------------------------------------------------
+
+    def get_content(self) -> str | SafeString | None:
         """
-        Optional hook to provide dynamic content.
-        - Returns a dict: Merged into standard context.
-        - Returns a str: Rendered as direct HTML.
-        - Returns None: Default behavior (uses standard template + context).
+        Return direct HTML content.
+
+        Return ``None`` to use template-based rendering.
+
+        Direct content should be HTML suitable for insertion into the
+        rendered page.
         """
         return None
 
-    def render(self, request: HttpRequest | None = None) -> str:
-        """Universal render method for all UI components."""
-        return render_to_string(
-            self.get_template(),
-            self.get_context(),
-            request=request,
+    # ------------------------------------------------------------------
+    # Assets
+    # ------------------------------------------------------------------
+
+    def get_assets(self) -> dict[str, list[str]]:
+        """
+        Return assets required by the component.
+
+        Example::
+
+            return {
+                "js": ["js/chart.js"],
+                "css": ["css/chart.css"],
+            }
+        """
+        return {
+            "js": [],
+            "css": [],
+        }
+
+    # ------------------------------------------------------------------
+    # Rendering
+    # ------------------------------------------------------------------
+
+    def render_template(
+        self,
+        template: str,
+        context: dict[str, Any],
+        *,
+        request: HttpRequest | None = None,
+    ) -> SafeString:
+        """
+        Render a template using the component context.
+        """
+        return mark_safe(
+            render_to_string(
+                template_name=template,
+                context=context,
+                request=request,
+            )
         )
 
-    def __html__(self):
-        return mark_safe(self.render())
+    def render_content(
+        self,
+        content: str | SafeString,
+    ) -> SafeString:
+        """
+        Render direct component content.
+        """
+        if isinstance(content, SafeString):
+            return content
 
-    def __str__(self):
+        return mark_safe(content)
+
+    def render(
+        self,
+        request: HttpRequest | None = None,
+    ) -> SafeString:
+        """
+        Render the component.
+
+        Rendering follows this order:
+
+        1. Direct content from ``get_content()``.
+        2. Template from ``get_template()`` with ``get_context()``.
+        3. Raise an error if neither is available.
+        """
+        content = self.get_content()
+
+        if content is not None:
+            return self.render_content(content)
+
+        template = self.get_template()
+
+        if template:
+            return self.render_template(
+                template,
+                self.get_context(),
+                request=request,
+            )
+
+        raise ValueError(
+            f"{self.__class__.__name__} must define either "
+            "'template_name' or override 'get_content()'."
+        )
+
+    # ------------------------------------------------------------------
+    # HTML Protocol
+    # ------------------------------------------------------------------
+
+    def __html__(self) -> SafeString:
         return self.render()
+
+    def __str__(self) -> str:
+        return str(self.render())

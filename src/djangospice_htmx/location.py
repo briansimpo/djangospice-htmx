@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 from djangospice_framework.core.serializable import Serializable
-from djangospice_framework.core.payload import Payload
 
 
 @dataclass(slots=True, kw_only=True)
@@ -17,6 +17,6 @@ class HTMXLocation(Serializable):
     swap: str | None = None
     select: str | None = None
 
-    values: Payload = field(default_factory=Payload)
-    headers: Payload = field(default_factory=Payload)
+    values: dict[str, Any] = field(default_factory=dict)
+    headers: dict[str, Any] = field(default_factory=dict)
     

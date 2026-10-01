@@ -83,7 +83,7 @@ class ResponseRenderer:
 
         http_response = HttpResponse(
             content=content,
-            status=response.status,
+            status=response.status_code,
         )
 
         self.headers.render(
